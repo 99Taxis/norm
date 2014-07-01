@@ -13,3 +13,7 @@ dist
 /.project
 /RUNNING_PID
 /.settings
+
+
+# Mac Stuff
+*.DS_Store
