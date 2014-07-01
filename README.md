@@ -23,73 +23,84 @@ Getting Start
 
 1.  Add Norm to your project:
 
-This project is not published yet, so just copy the file [norm.scala](https://github.com/ricardolazaro/norm/blob/master/app/franeworks/norm/norm.scala) to your project.
+This project was forked from [Ricardo Lazaro's norm](https://github.com/ricardolazaro/norm) but it diverged too much and is not published yet, so just copy the file [Norm.scala](https://github.com/gcaliari/norm/blob/master/app/franeworks/norm/Norm.scala) to your project.
 
 2. Create a model class extending Norm:
 
   ```scala
     import models.frameworks.{NormCompanion, Norm}
-    import java.math.BigDecimal
+    import play.api.libs.json.{JsObject, JsValue, Json}
 
     case class Product(
-      id:              Long,
-      var name:        String,
-      var description: Option[String],
-      var price:       BigDecimal,
-      var taxRange:    Int,
-      var inStock:     Boolean) extends Norm[Product]
+                           name:              String,
+                           otherEntityId:     Long,
+                           monetaryValue:     BigDecimal,
+                           config:            JsValue,
+                           enabled:           Boolean = true,
+                           priority:          Int = 0,
+                           id:                Pk[Long] = NotAssigned
+                           ) extends Norm[Product] {
 
 
-    object Product extends NormCompanion[Product]
+    object Product extends NormCompanion[Product]{
+      implicit val ProductFormat = Json.format[Product]
+      def findByOtherEntity(otherEntity: OtherEntity): List[Product] = findByOtherEntity(otherEntity.id.get)
+      def findByOtherEntity(otherEntityId: Long):      List[Product] = findByProperties(Map("otherEntityId" -> otherEntityId, "enabled" -> true))
+    }
   ```
 
 3. Inserting a product:
+    ```scala
+        val product = Product(someName, otherEntityId, someMonetaryValue, someJson).save
+    ```
+
+Or
 
     ```scala
-    val optionId = Product.create(
-        Map(
-          "name"        ->  "productName",
-          "description" ->  "productDescription",
-          "price"       ->  new BigDecimal("10.00"),
-          "taxRange"    ->  2,
-          "inStock"     ->  true
+        val optionId = Product.create(
+          Map(
+            "name"          ->  "productName",
+            "otherEntityId" ->  1l,
+            "monetaryValue" ->  new BigDecimal("10.00"),
+            "config"        ->  JsNull
+          )
         )
-      )
     ```
 
 4. Updating a product
 
     ```scala
-    product.name        = newProductName
-    product.description = newDescription
-    product.price       = newPrice
-    product.taxRange    = newTaxRange
-    product.inStock     = newInStock
-    product.update()
+        product.name          = newProductName
+        product.otherEntityId = otherProductId
+        product.update
     ```
 
 5. Partial update
 
     ```scala
-    product.update(
-      Map(
-        "name"        -> newProductName,
-        "description" -> newDescription
-      )
-    )
+        product.update(
+          Map(
+            "name"        -> newProductName,
+            "otherEntityId" -> otherProductId
+          )
+        )
     ```
     
 6. Find a product
 
   ```scala
-  val product = Product.find(2l) // by id 2l
+    val product = Product.find(2l) // by id 2l
   ```
   
   ```scala
-  val productOption = Product.findOption(2l) // by id 2l
-  ```
-  ```scala
-  val products = Product.findByProperty("name", someName)
+    val productOption = Product.findOption(2l) // by id 2l
   ```
 
-More details see the [tests](https://github.com/ricardolazaro/norm/blob/master/test/models/spec/ProductSpec.scala)  
+  ```scala
+    val products = Product.findByProperty("name", someName)
+  ```
+
+  ```scala
+    val products = Product.findByProperties(Map("name" -> someName, "enabled" -> true))
+  ```
+
