@@ -126,7 +126,7 @@ private object NormProcessor {
   val creationDate = "createdAt"
   val updatedDate = "updatedAt"
 
-  def mapAttributeTypes(weirdAttributesMap: Map[String, ParameterValue[_]]): Seq[(String, ParameterValue[_])] = {
+  def mapAttributeTypes(weirdAttributesMap: Map[String, Any]): Seq[(String, ParameterValue[_])] = {
     weirdAttributesMap.map{ case (key, value) => (key, mapAttributeType(value)) }.toSeq
   }
 
@@ -158,10 +158,10 @@ class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQ
    *                   in the model
    * @return (TODO) number of the affected rows
    */
-  def update(attributes: Map[String, ParameterValue[_]] = Map()): Option[T] = {
+  def update(attributes: Map[String, Any] = Map()): Option[T] = {
     val providedProperties = if (attributes.isEmpty) NormProcessor.constructorProperties[T].map(_._1).toSet - NormProcessor.creationDate else attributes.keys.toSet
     val propertiesToUpdate = (providedProperties diff Set(NormProcessor.id)).toArray
-    val defaultAttributes = scala.collection.mutable.Map[String, ParameterValue[_]]()
+    val defaultAttributes = scala.collection.mutable.Map[String, Any]()
 
     val updateContent = ListBuffer[String]()
     propertiesToUpdate.foreach {
@@ -184,19 +184,20 @@ class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQ
     DB.withConnection {
       implicit c =>
         SQL(forUpdate).on(NormProcessor.mapAttributeTypes(defaultAttributes.toMap): _*).executeUpdate() match {
-          case numRows: Int if(numRows > 0) => Some(refresh(idValue))
+          case numRows: Int if(numRows > 0) => refresh(idValue)
           case _ => None
         }
 
     }
   }
 
-  def save(): T = {
+  def save(): Option[T] = {
     val onMap = attributes.map { att => att -> NormProcessor.mapAttributeType(anorm.toParameterValue(getFieldValue(att))) }
     DB.withConnection {
       implicit c =>
         SQL(createSql).on(onMap.toSeq: _*).executeInsert() match {
           case (id: Any) => refresh(id)
+          case _ => None
         }
     }
   }
@@ -205,13 +206,13 @@ class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQ
     rm.reflect(this).reflectField(tpe.declaration(newTermName(fieldName)).asTerm).get
   }
 
-  def refresh(id: Any = idValue): T = DB.withConnection {
+  def refresh(id: Any = idValue): Option[T] = DB.withConnection {
     implicit c =>
       val forSelect = s" $selectSql where ${NormProcessor.id} = {${NormProcessor.id}}"
       val query = SQL(forSelect).on(s"${NormProcessor.id}" -> id)
       query().collect {
         case r: Row => NormProcessor.instance[T](r, Some(tableName)).asInstanceOf[T]
-      }.toList.head
+      }.toList.headOption
   }
 
   def delete() = DB.withConnection {
