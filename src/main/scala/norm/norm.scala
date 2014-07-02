@@ -296,7 +296,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
       if(propertyMap.nonEmpty){
         val whereClause = propertyMap.keys.map{ propName => s"${propName} = {${propName}}"}.mkString(" AND ")
         val forSelect = s" $selectSql where ${whereClause}"
-        val onMap = NormProcessor.mapAttributeTypes(propertyMap.map { case (k, v) => k -> anorm.toParameterValue(v)})
+        val onMap = NormProcessor.mapAttributeTypes(propertyMap)
         query = SQL(forSelect).on(onMap: _*)()
       }
       runQuery(query)
