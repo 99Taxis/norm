@@ -349,6 +349,6 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
 
 
   lazy val createSql = s"INSERT INTO ${tableName} (${csvAttributes}) VALUES (${csvCurlyAttributes})"
-  lazy val selectSql = s"SELECT * FROM ${tableName} "
+  lazy val selectSql = s"SELECT $csvAttributes, ${NormProcessor.id} FROM ${tableName} "
 
 }
