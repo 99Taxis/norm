@@ -1,6 +1,8 @@
+import play.PlayScala
+
 name := "norm"
 
-version := "2.3.0"
+version := "2.3.2"
 
 
 resolvers ++= Seq(
@@ -8,7 +10,9 @@ resolvers ++= Seq(
   "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 )
 
-libraryDependencies += "play" % "anorm_2.9.3" % "2.1.1"
+libraryDependencies += anorm
+
+libraryDependencies += jdbc
 
 libraryDependencies += "play" %% "play-java-jdbc" % "2.1.5"
 
