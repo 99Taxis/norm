@@ -1,4 +1,4 @@
-package models.framework
+package norm
 
 import java.util.Date
 import anorm._
@@ -11,83 +11,86 @@ import scala.language.implicitConversions
 import org.joda.time.DateTime
 
 private trait NormedParameterValue
-private trait Wrapper[T] { def value: T }
 
-object QType extends Enumeration {
-  type QType = Value
-  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTSWITH, ENDSWITH = Value
+private trait Wrapper[T] {
+  def value: T
 }
-import QType._
 
-case class Q(condition: Tuple3[String, QType, Any], query: String = null) {
-  val _1 = if (condition != null) condition._1 else null
-  val _2 = if (condition != null) condition._2 else null
-  val _3 = if (condition != null) condition._3 else null
+object QueryOperation extends Enumeration {
+  type QueryOperation = Value
+  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH = Value
+}
 
-  def whereCondition(): String = {
-    if (query != null) return query
-    val operator = _2 match {
+import QueryOperation._
+
+case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String]) {
+  val whereCondition = eitherCondition match {
+    case Right(query)    => query
+    case Left(condition) => buildQueryFrom(condition._1, condition._2, condition._3)
+  }
+
+  def buildQueryFrom(column: String, queryOperation: QueryOperation, queryValue: Any): String ={
+    val operation: String = queryOperation match {
       case EQ => {
-        _3 match {
-          case None => "is"
-          case null => "is"
-          case _ => "="
+        queryValue match {
+          case None  => "is"
+          case null  => "is"
+          case _     => "="
         }
       }
       case NEQ => {
-        _3 match {
-          case None => "is not"
-          case null => "is not"
-          case _ => "<>"
+        queryValue match {
+          case None  => "is not"
+          case null  => "is not"
+          case _     => "<>"
         }
       }
-      case IN => "in"
-      case GT => ">"
-      case GTE => ">="
-      case LT => "<"
-      case LTE => "<="
-      case CONTAINS => "like"
-      case STARTSWITH => "like"
-      case ENDSWITH => "like"
+      case IN          => "in"
+      case GT          => ">"
+      case GTE         => ">="
+      case LT          => "<"
+      case LTE         => "<="
+      case CONTAINS    => "like"
+      case STARTS_WITH => "like"
+      case ENDS_WITH   => "like"
+      case _           => throw new RuntimeException(s"Could not find query operation '${queryOperation}'")
     }
 
-    val preparedValue: String = _3 match {
-      case s: String => s"'${_3}'"
-      case s: List[Any] => s.map { value =>
-        value match {
-          case v: String => s"'${v}'"
-          case _ => value
-        }
+    def preparedValue: String = queryValue match {
+      case s: String    => s"'${queryValue}'"
+      case s: List[Any] => s.map {
+        case v: String  => s"'${v}'"
+        case v          => v
       }.mkString(",")
-      case d: DateTime => s"'${d.toString("yyyy-MM-dd HH:mm:ss")}'"
-      case d: Date => s"'${new DateTime(d).toString("yyyy-MM-dd HH:mm:ss")}'"
-      case null => "null"
-      case None => "null"
-      case _ => _3.toString
+      case d: DateTime  => s"'${d.toString("yyyy-MM-dd HH:mm:ss")}'"
+      case d: Date      => s"'${new DateTime(d).toString("yyyy-MM-dd HH:mm:ss")}'"
+      case null         => "null"
+      case None         => "null"
+      case _            => queryValue.toString
     }
 
-    val value = _2 match {
-      case IN => s"(${preparedValue})"
-      case CONTAINS => s"'%${_3}%'"
-      case STARTSWITH => s"'${_3}%'"
-      case ENDSWITH => s"'%${_3}'"
-      case _ => preparedValue
+    val value = queryOperation match {
+      case IN           => s"(${preparedValue})"
+      case CONTAINS     => s"'%${queryValue}%'"
+      case STARTS_WITH  => s"'${queryValue}%'"
+      case ENDS_WITH    => s"'%${queryValue}'"
+      case _            => preparedValue
     }
-    return s"(${_1} ${operator} ${value})"
+    s"(${column} ${operation} ${value})"
   }
 
-  def or(q: Q): Q = {
-    Q(s"(${this.whereCondition} or ${q.whereCondition})")
+  def or(q: QueryCondition): QueryCondition = {
+    QueryCondition(s"(${this.whereCondition} or ${q.whereCondition})")
   }
 
-  def and(q: Q): Q = {
-    Q(s"(${this.whereCondition} and ${q.whereCondition})")
+  def and(q: QueryCondition): QueryCondition = {
+    QueryCondition(s"(${this.whereCondition} and ${q.whereCondition})")
   }
 }
 
-object Q {
-  def apply(condition: Tuple3[String, QType, Any]) = new Q(condition, null)
-  def apply(query: String) = new Q(null, query)
+object QueryCondition {
+  def apply(condition: (String, QueryOperation, Any)) = new QueryCondition(Left(condition))
+  def apply(query: String) = new QueryCondition(Right(query))
 }
 
 case class NormedParameter(name: String, value: Any, namedParameter: NamedParameter) {
@@ -96,6 +99,7 @@ case class NormedParameter(name: String, value: Any, namedParameter: NamedParame
 }
 
 object NormedParameter {
+
   import scala.language.implicitConversions
 
   /**
@@ -186,15 +190,15 @@ private object NormProcessor {
     val prefix = tableName.toLowerCase
     properties.foreach { property =>
       normalizedRowValuesMap.get(s"${prefix}.${property._1}".toLowerCase) match {
-        case Some(a: Option[Any]) if property._2 <:< typeOf[BigDecimal] => values += BigDecimal(a.get.asInstanceOf[java.math.BigDecimal])
-        case Some(a: Option[Any]) if property._2 <:< typeOf[JsValue] => values += Json.parse(a.get.asInstanceOf[org.postgresql.util.PGobject].getValue)
+        case Some(a: Option[Any]) if property._2 <:< typeOf[BigDecimal]  => values += BigDecimal(a.get.asInstanceOf[java.math.BigDecimal])
+        case Some(a: Option[Any]) if property._2 <:< typeOf[JsValue]     => values += Json.parse(a.get.asInstanceOf[org.postgresql.util.PGobject].getValue)
         case Some(a: Option[Any]) if property._2 <:< typeOf[Option[Any]] => values += a
-        case Some(a: Option[Any]) => values += a.get
-        case Some(a: Any) if property._2 <:< typeOf[BigDecimal] => values += BigDecimal(a.asInstanceOf[java.math.BigDecimal])
-        case Some(a: Any) if property._2 <:< typeOf[JsValue] => values += Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue)
-        case Some(a: Any) if property._2 <:< typeOf[Option[Any]] => values += Some(a)
-        case Some(a: Any) => values += a
-        case None => throw new RuntimeException
+        case Some(a: Option[Any])                                        => values += a.get
+        case Some(a: Any) if property._2 <:< typeOf[BigDecimal]          => values += BigDecimal(a.asInstanceOf[java.math.BigDecimal])
+        case Some(a: Any) if property._2 <:< typeOf[JsValue]             => values += Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue)
+        case Some(a: Any) if property._2 <:< typeOf[Option[Any]]         => values += Some(a)
+        case Some(a: Any)                                                => values += a
+        case None                                                        => throw new RuntimeException
       }
     }
     values
@@ -239,24 +243,24 @@ private object NormProcessor {
 
   def toNamedParameter(value: Any, np: NamedParameter): NamedParameter = {
     value match {
-      case vType: BigDecimal => (np.name -> vType.bigDecimal)
-      case vType: JsValue => (np.name -> Json.stringify(vType))
-      case vType: Date => (np.name -> vType)
-      case vType: String => (np.name -> vType)
-      case vType: Int => (np.name -> vType)
-      case vType: Long => (np.name -> vType)
-      case vType: Double => (np.name -> vType)
-      case vType: Boolean => (np.name -> vType)
-      case Some(vType: BigDecimal) => (np.name -> Some(vType.bigDecimal))
-      case Some(vType: JsValue) => (np.name -> Some(Json.stringify(vType)))
-      case Some(vType: Date) => (np.name -> Some(vType))
-      case Some(vType: String) => (np.name -> Some(vType))
-      case Some(vType: Int) => (np.name -> Some(vType))
-      case Some(vType: Long) => (np.name -> Some(vType))
-      case Some(vType: Double) => (np.name -> Some(vType))
-      case Some(vType: Boolean) => (np.name -> Some(vType))
-      case None => (np.name -> None)
-      case _ => np
+      case vType: BigDecimal         => (np.name -> vType.bigDecimal)
+      case vType: JsValue            => (np.name -> Json.stringify(vType))
+      case vType: Date               => (np.name -> vType)
+      case vType: String             => (np.name -> vType)
+      case vType: Int                => (np.name -> vType)
+      case vType: Long               => (np.name -> vType)
+      case vType: Double             => (np.name -> vType)
+      case vType: Boolean            => (np.name -> vType)
+      case Some(vType: BigDecimal)   => (np.name -> Some(vType.bigDecimal))
+      case Some(vType: JsValue)      => (np.name -> Some(Json.stringify(vType)))
+      case Some(vType: Date)         => (np.name -> Some(vType))
+      case Some(vType: String)       => (np.name -> Some(vType))
+      case Some(vType: Int)          => (np.name -> Some(vType))
+      case Some(vType: Long)         => (np.name -> Some(vType))
+      case Some(vType: Double)       => (np.name -> Some(vType))
+      case Some(vType: Boolean)      => (np.name -> Some(vType))
+      case None                      => (np.name -> None)
+      case _                         => np
     }
   }
 
@@ -276,7 +280,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
   val idTerm = tpe.decl(TermName(NormProcessor.id)).asTerm
 
   def create(): Option[Long] = {
-    val onSeq: Seq[NamedParameter] = attributes.map { att => NormProcessor.toNamedParameter(att, getFieldValue(att)) }
+    val onSeq: Seq[NamedParameter] = attributes.map { att => NormProcessor.toNamedParameter(att, getFieldValue(att))}
     DB.withConnection { implicit c =>
       SQL(createSql).on(onSeq: _*).executeInsert()
     }
@@ -302,7 +306,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
     val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.checkUpdateDate(properties)
-    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}" }
+    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}"}
     val queryProperties: Seq[NamedParameter] = updateProperties :+ idParam
 
     val updateBuilder = new StringBuilder(s"update ${tableName}")
@@ -393,7 +397,9 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
  */
 abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T] {
 
-  implicit def toNamedParameter[V](np: Seq[NormedParameter]): Seq[NamedParameter] = np.map { _.toNamedParameter }
+  implicit def toNamedParameter[V](np: Seq[NormedParameter]): Seq[NamedParameter] = np.map {
+    _.toNamedParameter
+  }
 
   /**
    * Creates a new database entry
@@ -404,7 +410,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    */
   def create(properties: NormedParameter*): Option[Long] = {
     val propertiesNames = properties.map(_.name)
-    val propertiesValuesRef = properties.map { a => s"{${a.name}}" }
+    val propertiesValuesRef = properties.map { a => s"{${a.name}}"}
 
     val creationBuilder = new StringBuilder(s"insert into ${tableName}")
     creationBuilder.append(s"(${propertiesNames.mkString(",")})")
@@ -430,7 +436,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
 
     val idParam: NamedParameter = (NormProcessor.id -> id)
     val updateProperties: Seq[NamedParameter] = NormProcessor.checkUpdateDate(properties)
-    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}" }
+    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}"}
     val queryProperties: Seq[NamedParameter] = updateProperties :+ idParam
 
     val updateBuilder = new StringBuilder(s"update ${tableName}")
@@ -459,8 +465,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
 
   def findAll(): List[T] = DB.withConnection {
     implicit c =>
-      var query = SQL(selectSql)()
-      runQuery(query)
+      runQuery(SQL(selectSql)())
   }
 
   /**
@@ -474,14 +479,13 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
       var query = SQL(selectSql)()
       if (properties.nonEmpty) {
         val whereClause = properties.map {
-          prop =>
-            {
-              prop.value match {
-                case None => s"${prop.name} is null"
-                case null => s"${prop.name} is null"
-                case _ => s"${prop.name} = {${prop.name}}"
-              }
+          prop => {
+            prop.value match {
+              case None => s"${prop.name} is null"
+              case null => s"${prop.name} is null"
+              case _ => s"${prop.name} = {${prop.name}}"
             }
+          }
         }.mkString(" AND ")
 
         val forSelect = s" $selectSql where ${whereClause}"
@@ -500,7 +504,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * val query2 = Q("columnA", EQ, "aaa").and(Q("columnB", > 1)).or(Q("columnC", STARTSWITH, "abc"))
    * findBy(query2, orderBy = "columnC asc", limit = 10)
    */
-  def findBy(q: Q, orderBy: String = null, limit: Int = 0): List[T] = DB.withConnection { implicit c =>
+  def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0): List[T] = DB.withConnection { implicit c =>
     var forSelect = s" $selectSql "
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
@@ -521,9 +525,9 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
 
   def findOption(id: Long) = findBy(NormProcessor.id -> id) headOption
 
-  def first(column: String): Option[T] = findBy(Q(""), orderBy = s"${column} asc", limit = 1).headOption
+  def first(column: String): Option[T] = findBy(QueryCondition(""), orderBy = s"${column} asc", limit = 1).headOption
 
-  def last(column: String): Option[T] = findBy(Q(""), orderBy = s"${column} desc", limit = 1).headOption
+  def last(column: String): Option[T] = findBy(QueryCondition(""), orderBy = s"${column} desc", limit = 1).headOption
 
   def searchWith(query: String, onParams: Seq[NormedParameter]) = DB.withConnection { implicit c =>
     SQL(query).on(onParams: _*)().collect {
