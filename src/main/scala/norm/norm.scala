@@ -499,8 +499,9 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    *
    * val query2 = Q("columnA", EQ, "aaa").and(Q("columnB", > 1)).or(Q("columnC", STARTSWITH, "abc"))
    * findBy(query2, orderBy = "columnC asc", limit = 10)
+   * findBy(query2, orderBy = "columnC asc", limit = 10, offset = 10)
    */
-  def findBy(q: Q, orderBy: String = null, limit: Int = 0): List[T] = DB.withConnection { implicit c =>
+  def findBy(q: Q, orderBy: String = null, limit: Int = 0, offset: Int = 0): List[T] = DB.withConnection { implicit c =>
     var forSelect = s" $selectSql "
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
@@ -510,6 +511,9 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
     }
     if (limit > 0) {
       forSelect = s"${forSelect} limit ${limit}"
+    }
+    if (offset > 0) {
+      forSelect = s"${forSelect} offset ${offset}"
     }
     val query = SQL(forSelect)()
     runQuery(query)
