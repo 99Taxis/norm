@@ -23,7 +23,7 @@ object QueryOperation extends Enumeration {
 
 import QueryOperation._
 
-case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String]) {
+case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String], escapeSQL: Boolean = false) {
   val whereCondition = eitherCondition match {
     case Right(query)    => query
     case Left(condition) => buildQueryFrom(condition._1, condition._2, condition._3)
@@ -60,9 +60,21 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
     }
 
     def preparedValue: String = queryValue match {
-      case s: String    => s"'${queryValue}'"
+      case s: String    => {
+        if(escapeSQL) {
+            s"'${QueryCondition.escapeSQL(queryValue)}'"
+          } else {
+            s"'${queryValue}'"
+          }
+      }
       case s: List[Any] => s.map {
-        case v: String  => s"'${v}'"
+        case v: String  => {
+          if(escapeSQL) {
+              s"'${QueryCondition.escapeSQL(v)}'"
+            } else {
+              s"'${v}'"
+            }
+        }
         case v          => v
       }.mkString(",")
       case d: DateTime  => s"'${d.toString("yyyy-MM-dd HH:mm:ss")}'"
@@ -94,6 +106,10 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
 object QueryCondition {
   def apply(condition: (String, QueryOperation, Any)) = new QueryCondition(Left(condition))
   def apply(query: String) = new QueryCondition(Right(query))
+
+  def escapeSQL(string: String): String = {
+    return string.replaceAll("[^\\w@. ]", "").trim()
+  }
 }
 
 case class NormedParameter(name: String, value: Any, namedParameter: NamedParameter) {
