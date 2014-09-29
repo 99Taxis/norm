@@ -18,7 +18,7 @@ private trait Wrapper[T] {
 
 object QueryOperation extends Enumeration {
   type QueryOperation = Value
-  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH = Value
+  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH, ICONTAINS, ISTARTS_WITH, IENDS_WITH = Value
 }
 
 import QueryOperation._
@@ -53,6 +53,9 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
       case CONTAINS    => "like"
       case STARTS_WITH => "like"
       case ENDS_WITH   => "like"
+      case ICONTAINS    => "ilike"
+      case ISTARTS_WITH => "ilike"
+      case IENDS_WITH   => "ilike"
       case _           => throw new RuntimeException(s"Could not find query operation '${queryOperation}'")
     }
 
@@ -70,11 +73,11 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
     }
 
     val value = queryOperation match {
-      case IN           => s"(${preparedValue})"
-      case CONTAINS     => s"'%${queryValue}%'"
-      case STARTS_WITH  => s"'${queryValue}%'"
-      case ENDS_WITH    => s"'%${queryValue}'"
-      case _            => preparedValue
+      case IN                         => s"(${preparedValue})"
+      case CONTAINS | ICONTAINS       => s"'%${queryValue}%'"
+      case STARTS_WITH | ISTARTS_WITH => s"'${queryValue}%'"
+      case ENDS_WITH | IENDS_WITH     => s"'%${queryValue}'"
+      case _                          => preparedValue
     }
     s"(${column} ${operation} ${value})"
   }
