@@ -18,12 +18,12 @@ private trait Wrapper[T] {
 
 object QueryOperation extends Enumeration {
   type QueryOperation = Value
-  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH = Value
+  val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH, ICONTAINS, ISTARTS_WITH, IENDS_WITH = Value
 }
 
 import QueryOperation._
 
-case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String]) {
+case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String], escapeSQL: Boolean = false) {
   val whereCondition = eitherCondition match {
     case Right(query)    => query
     case Left(condition) => buildQueryFrom(condition._1, condition._2, condition._3)
@@ -53,13 +53,28 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
       case CONTAINS    => "like"
       case STARTS_WITH => "like"
       case ENDS_WITH   => "like"
+      case ICONTAINS    => "ilike"
+      case ISTARTS_WITH => "ilike"
+      case IENDS_WITH   => "ilike"
       case _           => throw new RuntimeException(s"Could not find query operation '${queryOperation}'")
     }
 
     def preparedValue: String = queryValue match {
-      case s: String    => s"'${queryValue}'"
+      case s: String    => {
+        if(escapeSQL) {
+            s"'${QueryCondition.escapeSQL(queryValue)}'"
+          } else {
+            s"'${queryValue}'"
+          }
+      }
       case s: List[Any] => s.map {
-        case v: String  => s"'${v}'"
+        case v: String  => {
+          if(escapeSQL) {
+              s"'${QueryCondition.escapeSQL(v)}'"
+            } else {
+              s"'${v}'"
+            }
+        }
         case v          => v
       }.mkString(",")
       case d: DateTime  => s"'${d.toString("yyyy-MM-dd HH:mm:ss")}'"
@@ -70,11 +85,11 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
     }
 
     val value = queryOperation match {
-      case IN           => s"(${preparedValue})"
-      case CONTAINS     => s"'%${queryValue}%'"
-      case STARTS_WITH  => s"'${queryValue}%'"
-      case ENDS_WITH    => s"'%${queryValue}'"
-      case _            => preparedValue
+      case IN                         => s"(${preparedValue})"
+      case CONTAINS | ICONTAINS       => s"'%${queryValue}%'"
+      case STARTS_WITH | ISTARTS_WITH => s"'${queryValue}%'"
+      case ENDS_WITH | IENDS_WITH     => s"'%${queryValue}'"
+      case _                          => preparedValue
     }
     s"(${column} ${operation} ${value})"
   }
@@ -91,6 +106,10 @@ case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any),
 object QueryCondition {
   def apply(condition: (String, QueryOperation, Any)) = new QueryCondition(Left(condition))
   def apply(query: String) = new QueryCondition(Right(query))
+
+  def escapeSQL(string: String): String = {
+    return string.replaceAll("[^\\w@. ]", "").trim()
+  }
 }
 
 case class NormedParameter(name: String, value: Any, namedParameter: NamedParameter) {
@@ -503,8 +522,9 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    *
    * val query2 = Q("columnA", EQ, "aaa").and(Q("columnB", > 1)).or(Q("columnC", STARTSWITH, "abc"))
    * findBy(query2, orderBy = "columnC asc", limit = 10)
+   * findBy(query2, orderBy = "columnC asc", limit = 10, offset = 10)
    */
-  def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0): List[T] = DB.withConnection { implicit c =>
+  def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0, offset: Int = 0): List[T] = DB.withConnection { implicit c =>
     var forSelect = s" $selectSql "
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
@@ -514,6 +534,9 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
     }
     if (limit > 0) {
       forSelect = s"${forSelect} limit ${limit}"
+    }
+    if (offset > 0) {
+      forSelect = s"${forSelect} offset ${offset}"
     }
     val query = SQL(forSelect)()
     runQuery(query)
