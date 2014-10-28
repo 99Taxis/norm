@@ -548,6 +548,46 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
       }
   }
 
+
+  def findByQueryCondition(q: QueryCondition, orderBy: String = null, limit: Int = 0, offset: Int = 0): List[T] = DB.withConnection { implicit c =>
+    var forSelect = s" ${selectSql}"
+    if (q != null && q.whereCondition != "") {
+      forSelect = s"${forSelect} where ${q.whereCondition}"
+    }
+    if (orderBy != null && orderBy != "") {
+      forSelect = s"${forSelect} order by ${orderBy}"
+    }
+    if (limit > 0) {
+      forSelect = s"${forSelect} limit ${limit}"
+    }
+    if (offset > 0) {
+      forSelect = s"${forSelect} offset ${offset}"
+    }
+    forSelect = s"${forSelect};"
+    try {
+      val query = SQL(forSelect)
+      runQuery(query)
+    } catch {
+      case e: Throwable => {
+        throw e
+      }
+    }
+  }
+
+  def count(q: QueryCondition = null): Long = DB.withConnection { implicit c =>
+    val baseQuery: String = s"select count(${NormProcessor.id}) as total from ${tableName} "
+    val forSelect = {
+      if (q != null && q.whereCondition != "") {
+        s"${baseQuery} where ${q.whereCondition} ;"
+      } else {
+        baseQuery + ";"
+      }
+    }
+    val query = SQL(forSelect)
+    query().collect {
+      case r: Row => r[Long]("total")
+    }.head
+  }
 }
 
 abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = None) {
