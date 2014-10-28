@@ -1,15 +1,14 @@
 # --- !Ups
 
-CREATE TABLE PUBLIC.Products (
-    id          integer not null identity,
+CREATE TABLE Product (
+    id          bigserial primary key,
     name        varchar(25),
     description varchar(100),
     price       decimal,
     taxRange    integer,
-    inStock     boolean,
-    PRIMARY KEY (id),
+    inStock     boolean
 );
 
 # --- !Downs
 
-DROP TABLE Products;
+DROP TABLE Product;

@@ -1,6 +1,12 @@
+import play.PlayScala
+
 name := "norm"
 
-version := "2.3.0"
+version := "2.3.6"
+
+scalaVersion := "2.11.1"
+
+lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
 
 resolvers ++= Seq(
@@ -8,13 +14,15 @@ resolvers ++= Seq(
   "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 )
 
-libraryDependencies += "play" % "anorm_2.9.3" % "2.1.1"
+libraryDependencies += "com.typesafe.play" % "anorm_2.11" % "2.3.6"
 
-libraryDependencies += "play" %% "play-java-jdbc" % "2.1.5"
+libraryDependencies += "com.typesafe.play" % "play-java-jdbc_2.11" % "2.3.6"
 
-libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.10.3"
+libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.11.1"
 
 libraryDependencies += "org.specs2" %% "specs2" % "2.3.12" % "test"
 
-libraryDependencies += "play" %% "play-test" % "2.1.5" % "test"
+libraryDependencies += "com.typesafe.play" % "play-test_2.11" % "2.3.6" % "test"
+
+libraryDependencies += "org.postgresql" % "postgresql" % "9.3-1102-jdbc41"
 
