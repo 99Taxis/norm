@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>norm</groupId>
-    <artifactId>norm_2.11</artifactId>
+    <artifactId>norm_2.11.1</artifactId>
     <packaging>jar</packaging>
     <version>2.3.6</version>
 
