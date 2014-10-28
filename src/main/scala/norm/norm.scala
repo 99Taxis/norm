@@ -463,10 +463,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
       query.executeUpdate()
   }
 
-  def findAll(): List[T] = DB.withConnection {
-    implicit c =>
-      runQuery(SQL(selectSql)())
-  }
+  def findAll(): List[T] = runQuery(SQL(selectSql))
 
   /**
    * Finds a database entry having the provided properties values
@@ -474,9 +471,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * map of the property
    * @return a list with the matched entries
    */
-  def findBy(properties: NormedParameter*): List[T] = DB.withConnection {
-    implicit c =>
-      var query = SQL(selectSql)()
+  def findBy(properties: NormedParameter*): List[T] = {
       if (properties.nonEmpty) {
         val whereClause = properties.map {
           prop => {
@@ -489,10 +484,11 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
         }.mkString(" AND ")
 
         val forSelect = s" $selectSql where ${whereClause}"
-
-        query = SQL(forSelect).on(properties: _*)()
+        val query: SimpleSql[Row] = SQL(forSelect).on(properties: _*)
+        runQuery(query)
+      } else {
+        runQuery(SQL(selectSql))
       }
-      runQuery(query)
   }
 
   /**
@@ -504,7 +500,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * val query2 = Q("columnA", EQ, "aaa").and(Q("columnB", > 1)).or(Q("columnC", STARTSWITH, "abc"))
    * findBy(query2, orderBy = "columnC asc", limit = 10)
    */
-  def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0): List[T] = DB.withConnection { implicit c =>
+  def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0): List[T] = {
     var forSelect = s" $selectSql "
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
@@ -515,28 +511,26 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
     if (limit > 0) {
       forSelect = s"${forSelect} limit ${limit}"
     }
-    val query = SQL(forSelect)()
+    val query = SQL(forSelect)
     runQuery(query)
   }
 
   def findById(id: Long): Option[T] = findBy("id" -> id).headOption
 
-  def find(id: Long) = findBy(NormProcessor.id -> id) head
+  def find(id: Long) = findBy(NormProcessor.id -> id).head
 
-  def findOption(id: Long) = findBy(NormProcessor.id -> id) headOption
+  def findOption(id: Long) = findBy(NormProcessor.id -> id).headOption
 
   def first(column: String): Option[T] = findBy(QueryCondition(""), orderBy = s"${column} asc", limit = 1).headOption
 
   def last(column: String): Option[T] = findBy(QueryCondition(""), orderBy = s"${column} desc", limit = 1).headOption
 
-  def searchWith(query: String, onParams: Seq[NormedParameter]) = DB.withConnection { implicit c =>
-    SQL(query).on(onParams: _*)().collect {
-      case r: Row => NormProcessor.instance[T](r, tableName).asInstanceOf[T]
-    }.toList
+  def searchWith(query: String, onParams: Seq[NormedParameter]) = {
+    runQuery(SQL(query).on(onParams: _*))
   }
 
-  def runQuery(query: Stream[Row]): List[T] = {
-    query.collect {
+  def runQuery(query: SimpleSql[Row]): List[T] = DB.withConnection { implicit c =>
+    query().collect {
       case r: Row => NormProcessor.instance[T](r, tableName).asInstanceOf[T]
     }.toList
   }
