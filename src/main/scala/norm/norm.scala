@@ -198,7 +198,7 @@ private object NormProcessor {
         case Some(a: Any) if property._2 <:< typeOf[JsValue]             => values += Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue)
         case Some(a: Any) if property._2 <:< typeOf[Option[Any]]         => values += Some(a)
         case Some(a: Any)                                                => values += a
-        case None                                                        => throw new RuntimeException
+        case None                                                        => throw new RuntimeException(s"Unhandled type for attribute=${prefix}.${property._1}")
       }
     }
     values
