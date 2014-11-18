@@ -273,7 +273,7 @@ private object NormProcessor {
 
 }
 
-abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T] {
+abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
   val id: Option[Long]
   val rm = runtimeMirror(Thread.currentThread().getContextClassLoader)
   val tpe = typeOf[T]
@@ -395,7 +395,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
  * @tparam T
  * model class to be represented
  */
-abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T] {
+abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
 
   implicit def toNamedParameter[V](np: Seq[NormedParameter]): Seq[NamedParameter] = np.map {
     _.toNamedParameter
