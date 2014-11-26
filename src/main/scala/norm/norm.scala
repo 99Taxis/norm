@@ -2,6 +2,7 @@ package norm
 
 import java.util.Date
 import anorm._
+import play.api.Play
 import play.api.Play.current
 import play.api.db.DB
 import play.api.libs.json._
@@ -157,7 +158,7 @@ private object NormProcessor {
    */
   private def classConstructorFor[T: TypeTag] = {
     val tpe = typeOf[T]
-    val mirror = reflect.runtime.currentMirror
+    val mirror = runtimeMirror(Play.current.classloader)
     val classType = tpe.typeSymbol.asClass
     val cm = mirror.reflectClass(classType)
     val ctor = tpe.decl(termNames.CONSTRUCTOR).asMethod
@@ -275,7 +276,7 @@ private object NormProcessor {
 
 abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
   val id: Option[Long]
-  val rm = reflect.runtime.currentMirror
+  val rm = runtimeMirror(Play.current.classloader)
   val tpe = typeOf[T]
   val idTerm = tpe.decl(TermName(NormProcessor.id)).asTerm
 
