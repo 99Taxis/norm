@@ -102,6 +102,8 @@ case class NormedParameter(name: String, value: Any, namedParameter: NamedParame
 object NormedParameter {
 
   import scala.language.implicitConversions
+  implicit def jsValueToString(jsValue: JsValue): anorm.ParameterValue = Json.stringify(jsValue)
+  implicit def bigDecimalToJavaBigDecimal(bd: BigDecimal): anorm.ParameterValue = bd.bigDecimal
 
   /**
    * Conversion to use tuple, with first element being name
@@ -473,23 +475,23 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * @return a list with the matched entries
    */
   def findBy(properties: NormedParameter*): List[T] = {
-      if (properties.nonEmpty) {
-        val whereClause = properties.map {
-          prop => {
-            prop.value match {
-              case None => s"${prop.name} is null"
-              case null => s"${prop.name} is null"
-              case _ => s"${prop.name} = {${prop.name}}"
-            }
+    if (properties.nonEmpty) {
+      val whereClause = properties.map {
+        prop => {
+          prop.value match {
+            case None => s"${prop.name} is null"
+            case null => s"${prop.name} is null"
+            case _ => s"${prop.name} = {${prop.name}}"
           }
-        }.mkString(" AND ")
+        }
+      }.mkString(" AND ")
 
-        val forSelect = s" $selectSql where ${whereClause}"
-        val query: SimpleSql[Row] = SQL(forSelect).on(properties: _*)
-        runQuery(query)
-      } else {
-        runQuery(SQL(selectSql))
-      }
+      val forSelect = s" $selectSql where ${whereClause}"
+      val query: SimpleSql[Row] = SQL(forSelect).on(properties: _*)
+      runQuery(query)
+    } else {
+      runQuery(SQL(selectSql))
+    }
   }
 
   /**
