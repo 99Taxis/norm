@@ -6,6 +6,7 @@ import play.api.Play
 import play.api.Play.current
 import play.api.db.DB
 import play.api.libs.json._
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.reflect.runtime.universe._
 import scala.language.implicitConversions
@@ -100,10 +101,7 @@ case class NormedParameter(name: String, value: Any) {
 }
 
 object NormedParameter {
-
   import scala.language.implicitConversions
-  //  implicit def jsValueToString(jsValue: JsValue): anorm.ParameterValue = Json.stringify(jsValue)
-  //  implicit def bigDecimalToJavaBigDecimal(bd: BigDecimal): anorm.ParameterValue = bd.bigDecimal
 
   implicit def string[V](t: (String, V)): NormedParameter = NormedParameter(t._1, t._2)
   implicit def symbol[V](t: (scala.Symbol, V)): NormedParameter = NormedParameter(t._1.name, t._2)
@@ -288,22 +286,9 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
     val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.checkUpdateDate(properties)
-    val updateAttributeWithTypes: Seq[(NamedParameter, Type)] = updateProperties.map { prop => prop -> attributeWithTypes.find(_._1 == prop.name).get._2 }
-    val updateContent = updateAttributeWithTypes.map { prop =>
-      prop._2 match {
-        case attType if attType <:< typeOf[JsValue] => s"${prop._1.name}=CAST({${prop._1.name}} AS json)"
-        case _ => s"${prop._1.name}={${prop._1.name}}"
-      }
-    }
-    val queryProperties: Seq[NamedParameter] = updateProperties :+ idParam
-
-    val updateBuilder = new StringBuilder(s"update ${tableName}")
-    updateBuilder.append(" set ")
-    updateBuilder.append(updateContent.mkString(","))
-    updateBuilder.append(s" where ${NormProcessor.id}={${NormProcessor.id}}")
-    val forUpdate = updateBuilder.mkString
+    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
-      SQL(forUpdate).on(queryProperties: _*).executeUpdate()
+      SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
   }
 
@@ -421,19 +406,12 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * the count of updated row(s)
    */
   def update(id: Long, properties: NormedParameter*): Int = {
-
     val idParam: NamedParameter = (NormProcessor.id -> id)
     val updateProperties: Seq[NamedParameter] = NormProcessor.checkUpdateDate(properties)
-    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}"}
-    val queryProperties: Seq[NamedParameter] = updateProperties :+ idParam
+    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
 
-    val updateBuilder = new StringBuilder(s"update ${tableName}")
-    updateBuilder.append(" set ")
-    updateBuilder.append(updateContent.mkString(","))
-    updateBuilder.append(s" where ${NormProcessor.id}={${NormProcessor.id}}")
-    val forUpdate = updateBuilder.mkString
     DB.withConnection { implicit c =>
-      SQL(forUpdate).on(queryProperties: _*).executeUpdate()
+      SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
   }
 
@@ -584,17 +562,30 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
   val attributeWithTypes: List[(String, reflect.runtime.universe.Type)] = NormProcessor.constructorProperties[T].filter {
     att => NormProcessor.id != att._1
   }
-  val attributes: Seq[String] = attributeWithTypes.map(_._1)
 
-  lazy val csvAttributes = attributes.mkString(",")
-  lazy val csvCurlyAttributes = attributeWithTypes.map { att =>
+  lazy val attributesToSqlQueryMapping: Map[String, String] = attributeWithTypes.map { att =>
     att._2 match {
-      case attType if attType <:< typeOf[JsValue] => s"CAST({${att._1}} AS json)"
-      case attType => s"{${att._1}}"
+      case attType if attType <:< typeOf[JsValue] => att._1 -> s"CAST({${att._1}} AS json)"
+      case _ => att._1 -> s"{${att._1}}"
     }
-  }.mkString(",")
+  }.toMap
+
+  lazy val attributes: Seq[String] = attributesToSqlQueryMapping.keys.toSeq
+  lazy val csvAttributes = attributes.mkString(",")
+  lazy val csvCurlyAttributes = attributesToSqlQueryMapping.values.mkString(",")
 
   lazy val createSql = s"INSERT INTO ${tableName} (${csvAttributes}) VALUES (${csvCurlyAttributes})"
   lazy val selectSql = s"SELECT $csvAttributes, ${NormProcessor.id} FROM ${tableName} "
+
+  def updateQuery(updateProperties: Seq[NamedParameter]): String = {
+    val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.get(prop.name).get}"}
+
+    val updateBuilder = new mutable.StringBuilder(s"update ${tableName}")
+    updateBuilder.append(" set ")
+    updateBuilder.append(updateContent.mkString(","))
+    updateBuilder.append(s" where ${NormProcessor.id}={${NormProcessor.id}}")
+    updateBuilder.mkString
+  }
+
 
 }
