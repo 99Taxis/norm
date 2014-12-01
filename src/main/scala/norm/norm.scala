@@ -94,36 +94,19 @@ object QueryCondition {
   def apply(query: String) = new QueryCondition(Right(query))
 }
 
-case class NormedParameter(name: String, value: Any, namedParameter: NamedParameter) {
+case class NormedParameter(name: String, value: Any) {
   lazy val tupled: (String, Any) = (name, value)
-  lazy val toNamedParameter: NamedParameter = NormProcessor.toNamedParameter(value, namedParameter)
+  lazy val toNamedParameter: NamedParameter = NormProcessor.toNamedParameter(name, value)
 }
 
 object NormedParameter {
 
   import scala.language.implicitConversions
-  implicit def jsValueToString(jsValue: JsValue): anorm.ParameterValue = Json.stringify(jsValue)
-  implicit def bigDecimalToJavaBigDecimal(bd: BigDecimal): anorm.ParameterValue = bd.bigDecimal
+  //  implicit def jsValueToString(jsValue: JsValue): anorm.ParameterValue = Json.stringify(jsValue)
+  //  implicit def bigDecimalToJavaBigDecimal(bd: BigDecimal): anorm.ParameterValue = bd.bigDecimal
 
-  /**
-   * Conversion to use tuple, with first element being name
-   * of parameter as string.
-   *
-   * {{{
-   * val p: Parameter = ("name" -> 1l)
-   * }}}
-   */
-  implicit def string[V](t: (String, V))(implicit c: V => ParameterValue): NormedParameter = NormedParameter(t._1, t._2, t._1 -> c(t._2))
-
-  /**
-   * Conversion to use tuple,
-   * with first element being symbolic name or parameter.
-   *
-   * {{{
-   * val p: Parameter = ('name -> 1l)
-   * }}}
-   */
-  implicit def symbol[V](t: (scala.Symbol, V))(implicit c: V => ParameterValue): NormedParameter = NormedParameter(t._1.name, t._2, t._1 -> c(t._2))
+  implicit def string[V](t: (String, V)): NormedParameter = NormedParameter(t._1, t._2)
+  implicit def symbol[V](t: (scala.Symbol, V)): NormedParameter = NormedParameter(t._1.name, t._2)
 }
 
 /**
@@ -241,29 +224,25 @@ private object NormProcessor {
   val updatedDate = "updatedAt"
 
   def toNamedParameter(name: String, value: Any): NamedParameter = {
-    toNamedParameter(value, (name -> s"$value"))
-  }
-
-  def toNamedParameter(value: Any, np: NamedParameter): NamedParameter = {
     value match {
-      case vType: BigDecimal         => (np.name -> vType.bigDecimal)
-      case vType: JsValue            => (np.name -> Json.stringify(vType))
-      case vType: Date               => (np.name -> vType)
-      case vType: String             => (np.name -> vType)
-      case vType: Int                => (np.name -> vType)
-      case vType: Long               => (np.name -> vType)
-      case vType: Double             => (np.name -> vType)
-      case vType: Boolean            => (np.name -> vType)
-      case Some(vType: BigDecimal)   => (np.name -> Some(vType.bigDecimal))
-      case Some(vType: JsValue)      => (np.name -> Some(Json.stringify(vType)))
-      case Some(vType: Date)         => (np.name -> Some(vType))
-      case Some(vType: String)       => (np.name -> Some(vType))
-      case Some(vType: Int)          => (np.name -> Some(vType))
-      case Some(vType: Long)         => (np.name -> Some(vType))
-      case Some(vType: Double)       => (np.name -> Some(vType))
-      case Some(vType: Boolean)      => (np.name -> Some(vType))
-      case None                      => (np.name -> None)
-      case _                         => np
+      case vType: BigDecimal         => (name -> vType.bigDecimal)
+      case vType: JsValue            => (name -> Json.stringify(vType))
+      case vType: Date               => (name -> vType)
+      case vType: String             => (name -> vType)
+      case vType: Int                => (name -> vType)
+      case vType: Long               => (name -> vType)
+      case vType: Double             => (name -> vType)
+      case vType: Boolean            => (name -> vType)
+      case Some(vType: BigDecimal)   => (name -> Some(vType.bigDecimal))
+      case Some(vType: JsValue)      => (name -> Some(Json.stringify(vType)))
+      case Some(vType: Date)         => (name -> Some(vType))
+      case Some(vType: String)       => (name -> Some(vType))
+      case Some(vType: Int)          => (name -> Some(vType))
+      case Some(vType: Long)         => (name -> Some(vType))
+      case Some(vType: Double)       => (name -> Some(vType))
+      case Some(vType: Boolean)      => (name -> Some(vType))
+      case None                      => (name -> None)
+      case _                         => (name -> s"$value")
     }
   }
 
@@ -309,7 +288,13 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
     val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.checkUpdateDate(properties)
-    val updateContent = updateProperties.map { prop => s"${prop.name}={${prop.name}}"}
+    val updateAttributeWithTypes: Seq[(NamedParameter, Type)] = updateProperties.map { prop => prop -> attributeWithTypes.find(_._1 == prop.name).get._2 }
+    val updateContent = updateAttributeWithTypes.map { prop =>
+      prop._2 match {
+        case attType if attType <:< typeOf[JsValue] => s"${prop._1.name}=CAST({${prop._1.name}} AS json)"
+        case _ => s"${prop._1.name}={${prop._1.name}}"
+      }
+    }
     val queryProperties: Seq[NamedParameter] = updateProperties :+ idParam
 
     val updateBuilder = new StringBuilder(s"update ${tableName}")
