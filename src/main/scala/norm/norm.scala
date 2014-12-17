@@ -244,11 +244,11 @@ private object NormProcessor {
     }
   }
 
-  def checkUpdateDate(properties: Seq[NormedParameter]): Seq[NamedParameter] = {
+  def toNamedParameterWithUpdatedAt(properties: Seq[NormedParameter]): Seq[NamedParameter] = {
     properties.map { prop =>
-      if (prop.name == NormProcessor.updatedDate) NormedParameter.string(prop.name -> new Date()).toNamedParameter
-      else prop.toNamedParameter
-    }
+      if (prop.name == NormProcessor.updatedDate) NormedParameter.string(prop.name -> new Date())
+      else prop
+    } map { _.toNamedParameter }
   }
 
 }
@@ -285,7 +285,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
    */
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
-    val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.checkUpdateDate(properties)
+    val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
     val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
@@ -407,7 +407,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    */
   def update(id: Long, properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> id)
-    val updateProperties: Seq[NamedParameter] = NormProcessor.checkUpdateDate(properties)
+    val updateProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
     val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
 
     DB.withConnection { implicit c =>
