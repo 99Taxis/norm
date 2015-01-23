@@ -575,12 +575,16 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
     }
   }.toMap
 
+  lazy val tableNameAliasSufix = "1"
+  lazy val tableNameAlias = tableName + tableNameAliasSufix
   lazy val attributes: Seq[String] = attributesToSqlQueryMapping.keys.toSeq
-  lazy val csvAttributes = attributes.mkString(",")
+  lazy val csvAttributes = attributes.mkString(", ")
+  lazy val csvAttributesWithTableName = tableNameAlias + "." + attributes.mkString(s", ${tableNameAlias}.")
   lazy val csvCurlyAttributes = attributesToSqlQueryMapping.values.mkString(",")
 
   lazy val createSql = s"INSERT INTO ${tableName} (${csvAttributes}) VALUES (${csvCurlyAttributes})"
   lazy val selectSql = s"SELECT $csvAttributes, ${NormProcessor.id} FROM ${tableName} "
+  lazy val selectSqlWithTableName = s"SELECT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
 
   def updateQuery(updateProperties: Seq[NamedParameter]): String = {
     val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.get(prop.name).get}"}
@@ -591,6 +595,4 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
     updateBuilder.append(s" where ${NormProcessor.id}={${NormProcessor.id}}")
     updateBuilder.mkString
   }
-
-
 }
