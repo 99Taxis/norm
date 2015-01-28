@@ -327,7 +327,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
 
   def refresh(id: Long = idValue): Option[T] = DB.withConnection {
     implicit c =>
-      val forSelect = s" $selectSql where ${NormProcessor.id} = {${NormProcessor.id}}"
+      val forSelect = s" $selectQuery where ${NormProcessor.id} = {${NormProcessor.id}}"
       val query = SQL(forSelect).on(s"${NormProcessor.id}" -> id)
       query().collect {
         case r: Row => NormProcessor.instance[T](r, tableName).asInstanceOf[T]
@@ -433,7 +433,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
       query.executeUpdate()
   }
 
-  def findAll(): List[T] = runQuery(SQL(selectSql))
+  def findAll(): List[T] = runQuery(SQL(selectQuery))
 
   /**
    * Finds a database entry having the provided properties values
@@ -453,11 +453,11 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
         }
       }.mkString(" AND ")
 
-      val forSelect = s" $selectSql where ${whereClause}"
+      val forSelect = s" $selectQuery where ${whereClause}"
       val query: SimpleSql[Row] = SQL(forSelect).on(properties: _*)
       runQuery(query)
     } else {
-      runQuery(SQL(selectSql))
+      runQuery(SQL(selectQuery))
     }
   }
 
@@ -471,7 +471,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    * findBy(query2, orderBy = "columnC asc", limit = 10)
    */
   def findBy(q: QueryCondition, orderBy: String = null, limit: Int = 0): List[T] = {
-    var forSelect = s" $selectSql "
+    var forSelect = s" $selectQuery "
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
     }
@@ -520,7 +520,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
 
 
   def findByQueryCondition(q: QueryCondition, orderBy: String = null, limit: Int = 0, offset: Int = 0): List[T] = DB.withConnection { implicit c =>
-    var forSelect = s" ${selectSql}"
+    var forSelect = s" ${selectQuery}"
     if (q != null && q.whereCondition != "") {
       forSelect = s"${forSelect} where ${q.whereCondition}"
     }
@@ -583,8 +583,13 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
   lazy val csvCurlyAttributes = attributesToSqlQueryMapping.values.mkString(",")
 
   lazy val createSql = s"INSERT INTO ${tableName} (${csvAttributes}) VALUES (${csvCurlyAttributes})"
+  /**
+   * @deprecated  As of release 2.3.7.4, replaced by {@link #selectQuery}
+   */
+  @Deprecated
   lazy val selectSql = s"SELECT $csvAttributes, ${NormProcessor.id} FROM ${tableName} "
-  lazy val selectSqlWithTableName = s"SELECT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
+  lazy val selectQuery = s"SELECT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
+  lazy val selectDistinctQuery = s"SELECT DISTINCT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
 
   def updateQuery(updateProperties: Seq[NamedParameter]): String = {
     val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.get(prop.name).get}"}
