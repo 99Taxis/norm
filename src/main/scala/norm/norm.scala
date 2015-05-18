@@ -174,19 +174,18 @@ private object NormProcessor {
     val prefix = tableName.toLowerCase
     properties.foreach { property =>
       normalizedRowValuesMap.get(s"${prefix}.${property._1}".toLowerCase) match {
-        case Some(a: None.type)                                              => values += None
-        case Some(a: Option[Any]) if property._2 <:< typeOf[BigDecimal]      => values += BigDecimal(a.get.asInstanceOf[java.math.BigDecimal])
-        case Some(a: Option[Any]) if property._2 <:< typeOf[JsValue]         => values += Json.parse(a.get.asInstanceOf[org.postgresql.util.PGobject].getValue)
-        case Some(a: Option[Any]) if property._2 <:< typeOf[Option[JsValue]] =>
-          if(a.isDefined) values += Some(Json.parse(a.get.asInstanceOf[org.postgresql.util.PGobject].getValue))
-          else values += None
-        case Some(a: Option[Any]) if property._2 <:< typeOf[Option[Any]]     => values += a
-        case Some(a: Option[Any])                                            => values += a.get
-        case Some(a: Any) if property._2 <:< typeOf[BigDecimal]              => values += BigDecimal(a.asInstanceOf[java.math.BigDecimal])
-        case Some(a: Any) if property._2 <:< typeOf[JsValue]                 => values += Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue)
-        case Some(a: Any) if property._2 <:< typeOf[Option[Any]]             => values += Some(a)
-        case Some(a: Any)                                                    => values += a
-        case None                                                            => throw new RuntimeException(s"Unhandled type for attribute=${prefix}.${property._1}")
+        case Some(a: None.type)                                                 => values += None
+        case Some(a: Option[Any]) if property._2 <:< typeOf[BigDecimal]         => values += BigDecimal(a.get.asInstanceOf[java.math.BigDecimal])
+        case Some(a: Option[Any]) if property._2 <:< typeOf[JsValue]            => values += Json.parse(a.get.asInstanceOf[org.postgresql.util.PGobject].getValue)
+        case Some(a: Option[Any]) if property._2 <:< typeOf[Option[BigDecimal]] => values += a.map( a => BigDecimal(a.asInstanceOf[java.math.BigDecimal]) )
+        case Some(a: Option[Any]) if property._2 <:< typeOf[Option[JsValue]]    => values += a.map( a => Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue))
+        case Some(a: Option[Any]) if property._2 <:< typeOf[Option[Any]]        => values += a
+        case Some(a: Option[Any])                                               => values += a.get
+        case Some(a: Any) if property._2 <:< typeOf[BigDecimal]                 => values += BigDecimal(a.asInstanceOf[java.math.BigDecimal])
+        case Some(a: Any) if property._2 <:< typeOf[JsValue]                    => values += Json.parse(a.asInstanceOf[org.postgresql.util.PGobject].getValue)
+        case Some(a: Any) if property._2 <:< typeOf[Option[Any]]                => values += Some(a)
+        case Some(a: Any)                                                       => values += a
+        case None                                                               => throw new RuntimeException(s"Unhandled type for attribute=${prefix}.${property._1}")
       }
     }
     values
