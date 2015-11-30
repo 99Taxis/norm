@@ -2,7 +2,7 @@ import play.PlayScala
 
 name := "norm"
 
-version := "2.3.7.4"
+version := "2.3.7.6"
 
 scalaVersion := "2.11.7"
 
