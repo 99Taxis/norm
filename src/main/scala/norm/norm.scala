@@ -1,16 +1,18 @@
 package norm
 
 import java.util.Date
+
 import anorm._
+import org.joda.time.DateTime
 import play.api.Play
 import play.api.Play.current
 import play.api.db.DB
 import play.api.libs.json._
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.reflect.runtime.universe._
 import scala.language.implicitConversions
-import org.joda.time.DateTime
+import scala.reflect.runtime.universe._
 
 private trait NormedParameterValue
 
@@ -23,7 +25,7 @@ object QueryOperation extends Enumeration {
   val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH = Value
 }
 
-import QueryOperation._
+import norm.QueryOperation._
 
 case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String]) {
   val whereCondition = eitherCondition match {
@@ -258,7 +260,7 @@ private object NormProcessor {
 
 }
 
-abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
+abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateDate: Boolean = false) extends DefaultNormQueries[T](tableNameOpt) {
   val id: Option[Long]
   val rm = runtimeMirror(Play.current.classloader)
   val tpe = typeOf[T]
@@ -291,7 +293,13 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
     val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
-    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
+    val updateValues: Seq[NamedParameter] =
+      if (saveUpdateDate && !updateProperties.exists(_.name = NormProcessor.updatedDate)) {
+        val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
+        updateProperties ++ Seq(idParam, updateParam)
+      } else {
+        updateProperties :+ idParam
+      }
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
@@ -373,7 +381,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
  * @tparam T
  * model class to be represented
  */
-abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
+abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateDate: Boolean = false) extends DefaultNormQueries[T](tableNameOpt) {
 
   implicit def toNamedParameter[V](np: Seq[NormedParameter]): Seq[NamedParameter] = np.map {
     _.toNamedParameter
@@ -413,8 +421,13 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
   def update(id: Long, properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> id)
     val updateProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
-    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
-
+    val updateValues: Seq[NamedParameter] =
+      if (saveUpdateDate && !updateProperties.exists(_.name = NormProcessor.updatedDate)) {
+        val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
+        updateProperties ++ Seq(idParam, updateParam)
+      } else {
+        updateProperties :+ idParam
+      }
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
