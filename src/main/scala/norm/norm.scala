@@ -294,7 +294,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateD
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
     val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
     val updateValues: Seq[NamedParameter] =
-      if (saveUpdateDate && !updateProperties.exists(_.name = NormProcessor.updatedDate)) {
+      if (saveUpdateDate && !updateProperties.exists(_.name == NormProcessor.updatedDate)) {
         val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
         updateProperties ++ Seq(idParam, updateParam)
       } else {
@@ -422,7 +422,7 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None, sa
     val idParam: NamedParameter = (NormProcessor.id -> id)
     val updateProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
     val updateValues: Seq[NamedParameter] =
-      if (saveUpdateDate && !updateProperties.exists(_.name = NormProcessor.updatedDate)) {
+      if (saveUpdateDate && !updateProperties.exists(_.name == NormProcessor.updatedDate)) {
         val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
         updateProperties ++ Seq(idParam, updateParam)
       } else {
