@@ -1,4 +1,4 @@
-package norm
+package helpers
 
 import java.util.Date
 
@@ -292,14 +292,16 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateD
    */
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
-    val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
-    val updateValues: Seq[NamedParameter] =
-      if (saveUpdateDate && !updateProperties.exists(_.name == NormProcessor.updatedDate)) {
+    val namedProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
+    val updateProperties: Seq[NamedParameter] =
+      if (saveUpdateDate && !namedProperties.exists(_.name == NormProcessor.updatedDate)) {
         val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
-        updateProperties ++ Seq(idParam, updateParam)
+        namedProperties :+ updateParam
       } else {
-        updateProperties :+ idParam
+        namedProperties
       }
+    
+    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
@@ -420,14 +422,16 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None, sa
    */
   def update(id: Long, properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> id)
-    val updateProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
-    val updateValues: Seq[NamedParameter] =
-      if (saveUpdateDate && !updateProperties.exists(_.name == NormProcessor.updatedDate)) {
+    val namedProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
+    val updateProperties: Seq[NamedParameter] =
+      if (saveUpdateDate && !namedProperties.exists(_.name == NormProcessor.updatedDate)) {
         val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
-        updateProperties ++ Seq(idParam, updateParam)
+        namedProperties :+ updateParam
       } else {
-        updateProperties :+ idParam
+        namedProperties
       }
+
+    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
@@ -606,7 +610,7 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
   lazy val selectDistinctQuery = s"SELECT DISTINCT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
 
   def updateQuery(updateProperties: Seq[NamedParameter]): String = {
-    val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.get(prop.name).get}"}
+    val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.getOrElse(prop.name, s"{${prop.name}}")}"}
 
     val updateBuilder = new mutable.StringBuilder(s"update ${tableName}")
     updateBuilder.append(" set ")
