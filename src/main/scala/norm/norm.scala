@@ -1,16 +1,18 @@
 package norm
 
 import java.util.Date
+
 import anorm._
+import org.joda.time.DateTime
 import play.api.Play
 import play.api.Play.current
 import play.api.db.DB
 import play.api.libs.json._
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.reflect.runtime.universe._
 import scala.language.implicitConversions
-import org.joda.time.DateTime
+import scala.reflect.runtime.universe._
 
 private trait NormedParameterValue
 
@@ -258,7 +260,7 @@ private object NormProcessor {
 
 }
 
-abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
+abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateDate: Boolean = false) extends DefaultNormQueries[T](tableNameOpt) {
   val id: Option[Long]
   val rm = runtimeMirror(Play.current.classloader)
   val tpe = typeOf[T]
@@ -290,7 +292,15 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
    */
   def update(properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> idValue)
-    val updateProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
+    val namedProperties: Seq[NamedParameter] = if (properties.isEmpty) allProperties else NormProcessor.toNamedParameterWithUpdatedAt(properties)
+    val updateProperties: Seq[NamedParameter] =
+      if (saveUpdateDate && !namedProperties.exists(_.name == NormProcessor.updatedDate)) {
+        val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
+        namedProperties :+ updateParam
+      } else {
+        namedProperties
+      }
+    
     val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
@@ -373,7 +383,7 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None) extends Def
  * @tparam T
  * model class to be represented
  */
-abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) extends DefaultNormQueries[T](tableNameOpt) {
+abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateDate: Boolean = false) extends DefaultNormQueries[T](tableNameOpt) {
 
   implicit def toNamedParameter[V](np: Seq[NormedParameter]): Seq[NamedParameter] = np.map {
     _.toNamedParameter
@@ -412,9 +422,16 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None) ex
    */
   def update(id: Long, properties: NormedParameter*): Int = {
     val idParam: NamedParameter = (NormProcessor.id -> id)
-    val updateProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
-    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
+    val namedProperties: Seq[NamedParameter] = NormProcessor.toNamedParameterWithUpdatedAt(properties)
+    val updateProperties: Seq[NamedParameter] =
+      if (saveUpdateDate && !namedProperties.exists(_.name == NormProcessor.updatedDate)) {
+        val updateParam: NamedParameter = (NormProcessor.updatedDate -> DateTime.now())
+        namedProperties :+ updateParam
+      } else {
+        namedProperties
+      }
 
+    val updateValues: Seq[NamedParameter] = updateProperties :+ idParam
     DB.withConnection { implicit c =>
       SQL(updateQuery(updateProperties)).on(updateValues: _*).executeUpdate()
     }
@@ -593,7 +610,7 @@ abstract class DefaultNormQueries[T: TypeTag](tableNameOpt: Option[String] = Non
   lazy val selectDistinctQuery = s"SELECT DISTINCT $csvAttributesWithTableName, ${tableNameAlias}.${NormProcessor.id} FROM ${tableName} ${tableNameAlias}"
 
   def updateQuery(updateProperties: Seq[NamedParameter]): String = {
-    val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.get(prop.name).get}"}
+    val updateContent = updateProperties.map { prop => s"${prop.name}=${attributesToSqlQueryMapping.getOrElse(prop.name, s"{${prop.name}}")}"}
 
     val updateBuilder = new mutable.StringBuilder(s"update ${tableName}")
     updateBuilder.append(" set ")
