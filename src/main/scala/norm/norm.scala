@@ -25,7 +25,7 @@ object QueryOperation extends Enumeration {
   val EQ, NEQ, IN, GT, GTE, LT, LTE, CONTAINS, STARTS_WITH, ENDS_WITH = Value
 }
 
-import norm.QueryOperation._
+import QueryOperation._
 
 case class QueryCondition(eitherCondition: Either[(String, QueryOperation, Any), String]) {
   val whereCondition = eitherCondition match {
