@@ -359,6 +359,24 @@ abstract class Norm[T: TypeTag](tableNameOpt: Option[String] = None, saveUpdateD
     }
   }
 
+  def createdAt: Option[DateTime] = {
+    val query = s"SELECT ${NormProcessor.creationDate} FROM $tableName WHERE ${NormProcessor.id} = {${NormProcessor.id}}"
+    scala.util.Try {
+      DB.withConnection { implicit c =>
+        SQL(query).on(NormProcessor.id -> id)().map { row => row[DateTime](NormProcessor.creationDate) } headOption
+      }
+    } getOrElse(None)
+  }
+
+  def updatedAt: Option[DateTime] = {
+    val query = s"SELECT ${NormProcessor.updatedDate} FROM $tableName WHERE ${NormProcessor.id} = {${NormProcessor.id}}"
+    scala.util.Try {
+      DB.withConnection { implicit c =>
+        SQL(query).on(NormProcessor.id -> id)().map { row => row[DateTime](NormProcessor.updatedDate) } headOption
+      }
+    } getOrElse(None)
+  }
+
   private def getFieldValue(fieldName: String): Any = {
     rm.reflect(this).reflectField(tpe.decl(TermName(fieldName)).asTerm).get
   }
