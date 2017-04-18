@@ -99,6 +99,45 @@ class ProductSpec extends PlaySpecification {
       updatedProduct.price       must equalTo(price)
       updatedProduct.taxRange    must equalTo(taxRange)
       updatedProduct.inStock     must equalTo(inStock)
+      updatedProduct.updatedAt.get.getMillis must beGreaterThan(updatedProduct.createdAt.get.getMillis)
+    }
+
+    "full update a database entry" in new WithApplication(FakeApplication()) {
+
+      val productName    = "ProductName"
+      val price          = new BigDecimal("11.00")
+      val taxRange       = 3
+      val description    = Some("description")
+      val inStock        = false
+
+      val newProductName = "NewProductName"
+      val newDescription = Some("NewDescription")
+
+      val productId = Product(
+        name        =  productName,
+        price       =  price,
+        taxRange    =  taxRange,
+        description =  description,
+        inStock     =  inStock
+      ).save.get.id.get
+
+      val product = Product.find(productId)
+
+      product.copy(
+        name        = newProductName,
+        description = newDescription
+      ).update()
+
+      // updates only the specified fields
+      val updatedProduct = Product.find(productId)
+      updatedProduct.name        must equalTo(newProductName)
+      updatedProduct.description must equalTo(newDescription)
+
+      // this properties should not be updated
+      updatedProduct.price       must equalTo(price)
+      updatedProduct.taxRange    must equalTo(taxRange)
+      updatedProduct.inStock     must equalTo(inStock)
+      updatedProduct.updatedAt.get.getMillis must beGreaterThan(updatedProduct.createdAt.get.getMillis)
     }
   }
 
@@ -138,8 +177,10 @@ class ProductSpec extends PlaySpecification {
         p.update("name" -> nameAfterUpdated)
       }
 
-      Product.find(productId1).name must equalTo(nameAfterUpdated)
-      Product.find(productId2).name must equalTo(nameAfterUpdated)
+      val updatedProduct1 = Product.find(productId1)
+      val updatedProduct2 = Product.find(productId2)
+      updatedProduct1.name must equalTo(nameAfterUpdated)
+      updatedProduct2.name must equalTo(nameAfterUpdated)
     }
   }
 

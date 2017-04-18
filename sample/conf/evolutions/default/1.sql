@@ -6,7 +6,9 @@ CREATE TABLE Product (
     description varchar(100),
     price       decimal,
     taxRange    integer,
-    inStock     boolean
+    inStock     boolean,
+    createdAt   TIMESTAMP DEFAULT now(),
+    updatedAt   TIMESTAMP DEFAULT now()
 );
 
 # --- !Downs

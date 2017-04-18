@@ -10,7 +10,7 @@ case class Product(
 
   var taxRange:    Int,
   var inStock:     Boolean,
-  id:              Option[Long] = None) extends Norm[Product]
+  id:              Option[Long] = None) extends Norm[Product](saveUpdateDate = true)
 
 
-object Product extends NormCompanion[Product]
+object Product extends NormCompanion[Product](saveUpdateDate = true)
