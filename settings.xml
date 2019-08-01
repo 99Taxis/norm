@@ -7,12 +7,12 @@
         <server>
             <id>central</id>
             <username>99publish</username>
-            <password>${ARTIFACTORY.PASSWORD}</password>
+            <password>${ARTIFACTORY_PASSWORD}</password>
         </server>
         <server>
             <id>snapshots</id>
             <username>99publish</username>
-            <password>${ARTIFACTORY.PASSWORD}</password>
+            <password>${ARTIFACTORY_PASSWORD}</password>
         </server>
     </servers>
 </settings>
