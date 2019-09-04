@@ -535,11 +535,11 @@ abstract class NormCompanion[T: TypeTag](tableNameOpt: Option[String] = None, sa
     runQuery(SQL(query).on(onParams: _*))
   }
 
-  def runQuery(query: SimpleSql[Row])(implicit databaseName: String = "default"): List[T] = DB.withConnection(databaseName)(implicit c =>
+  def runQuery(query: SimpleSql[Row]): List[T] = DB.withConnection { implicit c =>
     query().collect {
       case r: Row => NormProcessor.instance[T](r, tableName).asInstanceOf[T]
     }.toList
-  )
+  }
 
   /**
    * Perform a action for each entry
